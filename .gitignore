@@ -1,3 +1,4 @@
 .env
-raw_data/yelp_academic_dataset_business.json
-dataset/yelp_fred_merged.parquet
+data_pipeline/src/raw_data/yelp_academic_dataset_business.json
+data_pipeline/src/dataset/yelp_fred_merged.parquet
+data_pipeline/src/outputs

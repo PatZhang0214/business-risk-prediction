@@ -283,7 +283,7 @@ def build_merged_dataset(yelp_json_path, fips_cache, biz_fips_map, max_entries):
 
 # ___________________________________________________________________________
 if __name__ == "__main__":
-    yelp_path = "raw_data/yelp_academic_dataset_business.json"
+    yelp_path = "../raw_data/yelp_academic_dataset_business.json"
     max_entries = 1000
 
     print("Building FIPS → Economic Indicator Cache...")
@@ -308,6 +308,13 @@ if __name__ == "__main__":
         "avg_weekly_wages"
     ])
 
-    final_df.to_parquet("dataset/yelp_fred_merged.parquet", index=False)
+    open_count = (final_df["is_open"] == 1).sum()
+    closed_count = (final_df["is_open"] == 0).sum()
+    total = len(final_df)
+
+    print(f"Open: {open_count} ({open_count/total:.1%})")
+    print(f"Closed: {closed_count} ({closed_count/total:.1%})")
+
+    final_df.to_parquet("../dataset/yelp_fred_merged.parquet", index=False)
     print("Dataset saved to dataset/yelp_fred_merged.parquet")
 

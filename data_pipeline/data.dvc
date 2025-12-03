@@ -1,0 +1,4 @@
+dvc init
+dvc add data/raw.parquet
+git add .
+git commit -m "Version raw dataset"

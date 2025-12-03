@@ -1,0 +1,8 @@
+polars
+pydantic
+hydra-core
+scikit-learn
+joblib
+datasets
+huggingface_hub
+dvc

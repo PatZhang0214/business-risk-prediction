@@ -1,0 +1,14 @@
+data:
+  raw_path: data/raw.parquet
+  output_path: outputs/processed.parquet
+preprocess:
+  drop_missing_threshold: 0.3
+  normalize: true
+features:
+  numeric_cols:
+  - rating
+  - pcpi
+  - poverty_rate
+  - median_household_income
+  - unemployment_rate
+  - avg_weekly_wages
