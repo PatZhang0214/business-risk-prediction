@@ -1,6 +1,10 @@
 data:
   raw_path: "dataset/yelp_fred_merged.parquet"
   output_path: "outputs/processed.parquet"
+  scaler_path: "artifacts/scaler.pkl"
+  hf_repo_id: "PatZhang0214/business-risk-prediction-dataset"  # Add this
+  hf_filename: "yelp_fred_merged.parquet"  # Add this (or whatever the file is named in HF)
+
 
 preprocess:
   drop_missing_threshold: 0.3
