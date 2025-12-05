@@ -6,3 +6,5 @@ joblib
 datasets
 huggingface_hub
 dvc
+numpy
+scipy
