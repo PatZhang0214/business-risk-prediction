@@ -18,3 +18,4 @@ features:
     - median_household_income
     - unemployment_rate
     - avg_weekly_wages
+    - log_review_count

@@ -1,0 +1,17 @@
+data:
+  raw_path: dataset/yelp_fred_merged.parquet
+  output_path: outputs/processed.parquet
+  scaler_path: artifacts/scaler.pkl
+  hf_repo_id: PatZhang0214/business-risk-prediction-dataset
+  hf_filename: yelp_fred_merged.parquet
+preprocess:
+  drop_missing_threshold: 0.3
+  normalize: true
+features:
+  numeric_cols:
+  - rating
+  - pcpi
+  - poverty_rate
+  - median_household_income
+  - unemployment_rate
+  - avg_weekly_wages

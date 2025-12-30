@@ -6,6 +6,9 @@ from tqdm import tqdm
 import os
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from math import log
+from collections import Counter
+from datetime import datetime
 
 load_dotenv()
 FRED_API_KEY = os.getenv("FRED_API_KEY")
@@ -16,6 +19,28 @@ CENSUS_API_KEY = os.getenv("CENSUS_API_KEY")
 BLS_URL = os.getenv("BLS_URL")
 
 session = requests.Session()  # reuse connections
+
+def get_top_k_categories(yelp_json_path, max_entries, k=75):
+    """
+    Returns a list of the top-K most frequent Yelp categories.
+    """
+    counter = Counter()
+
+    with open(yelp_json_path, "r", encoding="utf-8") as f:
+        for idx, line in enumerate(f):
+            if idx >= max_entries:
+                break
+
+            biz = json.loads(line)
+            cats = biz.get("categories")
+            if not cats:
+                continue
+
+            for c in cats.split(", "):
+                counter[c] += 1
+
+    top_categories = [c for c, _ in counter.most_common(k)]
+    return top_categories
 
 def safe_fetch(fn, *args, max_retries=5, base_delay=1):
     delay = base_delay
@@ -67,6 +92,8 @@ def load_yelp_businesses_datasets(path):
                 "is_open": obj.get("is_open"),
                 "latitude": obj.get("latitude"),
                 "logitude": obj.get("longitude"),
+                "review_count": obj.get("review_count"),
+                "categories": obj.get('categories'),
                 "state": obj.get("state"),
                 "city": obj.get("city")
             })
@@ -97,13 +124,12 @@ def assign_fips(df):
     return df
 
 def fetch_census_series(series_id, fips):
-    # https://api.census.gov/data/2023/acs/acs5/profile?get=DP03_0065E&for=county:083&in=state:06&key=5e02d264229f90df7cd40bcdafaa9a529888a2a5
     if series_id == "SAEPOVRTALL_PT":
         census_url = CENSUS_URL+f"/timeseries/poverty/saipe?get={series_id}"
-        parameters = f"&for=county:{fips[2:]}&in=state:{fips[:2]}&time=2023&key={CENSUS_API_KEY}"
+        parameters = f"&for=county:{fips[2:]}&in=state:{fips[:2]}&time=2018&key={CENSUS_API_KEY}"
         census_url += parameters
     else:
-        census_url = CENSUS_URL+f"/2023/acs/acs5/profile?get={series_id}"
+        census_url = CENSUS_URL+f"/2018/acs/acs5/profile?get={series_id}"
         parameters = f"&for=county:{fips[2:]}&in=state:{fips[:2]}&key={CENSUS_API_KEY}"
         census_url += parameters
     try:
@@ -124,7 +150,32 @@ def fetch_census_series(series_id, fips):
             print(f"Error fetching SAIPE poverty rate for FIPS {fips}: {e}")
             return None
 
-def fetch_fred_series(series_id):
+# def fetch_fred_series(series_id):
+#     url = f"{FRED_URL}?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json"
+#     try:
+#         r = requests.get(url, timeout=10)
+#         data = r.json()
+
+#         observations = data.get("observations", [])
+#         if not observations:
+#             return None
+
+#         # Return the most recent valid numeric value
+#         for obs in reversed(observations):
+#             value = obs.get("value")
+#             if value not in ["", ".", None]:
+#                 try:
+#                     return float(value)
+#                 except:
+#                     return None
+
+#     except Exception as e:
+#         print(f"FRED error for {series_id}: {e}")
+#         return None
+
+#     return None
+
+def fetch_fred_series(series_id, target_date="2018-01-01"):
     url = f"{FRED_URL}?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json"
     try:
         r = requests.get(url, timeout=10)
@@ -134,20 +185,22 @@ def fetch_fred_series(series_id):
         if not observations:
             return None
 
-        # Return the most recent valid numeric value
-        for obs in reversed(observations):
-            value = obs.get("value")
-            if value not in ["", ".", None]:
-                try:
-                    return float(value)
-                except:
-                    return None
+        # Find the observation matching the target date
+        for obs in observations:
+            if obs.get("date") == target_date:
+                value = obs.get("value")
+                if value not in ["", ".", None]:
+                    try:
+                        return float(value)
+                    except:
+                        return None
+        
+        # If target date not found, return None
+        return None
 
     except Exception as e:
         print(f"FRED error for {series_id}: {e}")
         return None
-
-    return None
 
 def fetch_bls_series(fips):
     bls_url = BLS_URL+f"{fips}.csv"
@@ -167,28 +220,6 @@ def get_economic_indicators(fips):
         "unemployment_rate": fetch_census_series("DP03_0009PE", fips),
         "avg_weekly_wages": fetch_bls_series(fips)  # may require fallback
     }
-
-# def build_county_econ_cache(yelp_json_path, max_entries):
-    
-#     fips_cache = {}
-#     with open(yelp_json_path, "r", encoding="utf-8") as f:
-#         for idx, line in enumerate(tqdm(f, total=max_entries, desc="Businesses")):
-#             if idx >= max_entries:
-#                 break
-
-#             biz = json.loads(line.strip())
-
-#             lat = biz.get("latitude")
-#             lon = biz.get("longitude")
-#             if lat is None or lon is None:
-#                 continue
-
-#             fips = get_fips(lat, lon)
-#             if fips and fips not in fips_cache:
-#                 econ = safe_fetch(get_economic_indicators, fips)
-#                 fips_cache[fips] = econ
-
-#     return fips_cache
 
 def build_county_econ_cache(yelp_json_path, max_entries):
 
@@ -221,7 +252,54 @@ def build_county_econ_cache(yelp_json_path, max_entries):
 
     return fips_cache, biz_fips_map
 
-# def build_merged_dataset(yelp_json_path, fips_cache, max_entries):
+def build_business_age_map(checkin_json_path, max_entries=None):
+    age_map = {}
+
+    with open(checkin_json_path, "r", encoding="utf-8") as f:
+        iterator = enumerate(f)
+
+        if max_entries:
+            iterator = tqdm(
+                iterator,
+                total=max_entries,
+                desc="Processing check-ins"
+            )
+        else:
+            iterator = tqdm(
+                iterator,
+                desc="Processing check-ins"
+            )
+
+        for idx, line in iterator:
+            if max_entries and idx >= max_entries:
+                break
+
+            obj = json.loads(line)
+            business_id = obj.get("business_id")
+            dates_str = obj.get("date")
+
+            if not dates_str:
+                continue
+
+            try:
+                dates = [
+                    datetime.strptime(d.strip(), "%Y-%m-%d %H:%M:%S")
+                    for d in dates_str.split(",")
+                ]
+            except Exception:
+                continue
+
+            first = min(dates)
+            last = max(dates)
+
+            age_map[business_id] = {
+                "years_in_business": (last - first).days / 365.25,
+                "num_checkins": len(dates),
+                "has_checkin": 1
+            }
+
+    return age_map
+# def build_merged_dataset(yelp_json_path, fips_cache, biz_fips_map, max_entries):
 #     rows = []
 
 #     with open(yelp_json_path, "r", encoding="utf-8") as f:
@@ -229,28 +307,49 @@ def build_county_econ_cache(yelp_json_path, max_entries):
 #             if idx >= max_entries:
 #                 break
 
-#             biz = json.loads(line.strip())
+#             biz = json.loads(line)
+#             business_id = biz.get("business_id")
 
-#             lat = biz.get("latitude")
-#             lon = biz.get("longitude")
-#             fips = get_fips(lat, lon)
-
-#             if not fips or fips not in fips_cache:
+#             # USE CACHED FIPS (NO API CALL)
+#             fips = biz_fips_map.get(business_id)
+#             if not fips:
 #                 continue
 
+#             econ = fips_cache.get(fips)
+#             if not econ:
+#                 continue
+
+#             review_count = biz.get("review_count")
+#             log_review_count = log(review_count + 1)
+#             rating = biz.get("stars")
+#             rating_x_reviews = rating * log_review_count
+
+
 #             rows.append({
-#                 "rating": biz.get("stars"),
+#                 "business_id": business_id,
+#                 "rating_x_reviews": rating_x_reviews,
 #                 "is_open": biz.get("is_open"),
-#                 "latitude": lat,
-#                 "longitude": lon,
+#                 "latitude": biz.get("latitude"),
+#                 "longitude": biz.get("longitude"),
 #                 "fips": fips,
-#                 **fips_cache[fips]
+#                 **econ
 #             })
 
 #     return pd.DataFrame(rows)
 
-def build_merged_dataset(yelp_json_path, fips_cache, biz_fips_map, max_entries):
+def build_merged_dataset(
+    yelp_json_path,
+    fips_cache,
+    biz_fips_map,
+    max_entries,
+    top_categories,
+    business_age_map
+):
     rows = []
+
+    for c in top_categories:
+        if "," in c:
+            raise ValueError(f"Comma in category name: {c}")
 
     with open(yelp_json_path, "r", encoding="utf-8") as f:
         for idx, line in enumerate(f):
@@ -260,7 +359,6 @@ def build_merged_dataset(yelp_json_path, fips_cache, biz_fips_map, max_entries):
             biz = json.loads(line)
             business_id = biz.get("business_id")
 
-            # USE CACHED FIPS (NO API CALL)
             fips = biz_fips_map.get(business_id)
             if not fips:
                 continue
@@ -269,43 +367,115 @@ def build_merged_dataset(yelp_json_path, fips_cache, biz_fips_map, max_entries):
             if not econ:
                 continue
 
+            review_count = biz.get("review_count", 0)
+            rating = biz.get("stars")
+
+            if rating is None:
+                continue
+
+            log_review_count = log(review_count + 1)
+            rating_x_reviews = rating * log_review_count
+
+            # --- CATEGORY FEATURES ---
+            cats = biz.get("categories") or ""
+            cat_set = set(cats.split(", "))
+
+            cat_features = {
+                f"cat_{c}": int(c in cat_set)
+                for c in top_categories
+            }
+            age_info = business_age_map.get(business_id)
+
+            years_in_business = age_info["years_in_business"] if age_info else 0.0
+            num_checkins = age_info["num_checkins"] if age_info else 0
+            has_checkin = age_info["has_checkin"] if age_info else 0
+
             rows.append({
                 "business_id": business_id,
-                "rating": biz.get("stars"),
+                "rating_x_reviews": rating_x_reviews,
+                "review_count": review_count,
+                "num_categories": len(cat_set),
+                "years_in_business": years_in_business,
+                "num_checkins": num_checkins,
+                "has_checkin": has_checkin,
                 "is_open": biz.get("is_open"),
                 "latitude": biz.get("latitude"),
                 "longitude": biz.get("longitude"),
                 "fips": fips,
-                **econ
+                **econ,
+                **cat_features
             })
 
     return pd.DataFrame(rows)
 
 # ___________________________________________________________________________
+# if __name__ == "__main__":
+#     yelp_path = "../raw_data/yelp_academic_dataset_business.json"
+#     max_entries = 100
+
+#     print("Building FIPS → Economic Indicator Cache...")
+
+#     # unpack both values
+#     fips_cache, biz_fips_map = build_county_econ_cache(yelp_path, max_entries)
+
+#     print(f"\nCached counties: {len(fips_cache)}")
+#     print(f"Businesses with FIPS assigned: {len(biz_fips_map)}")
+
+#     print("Building merged dataset...")
+#     final_df = build_merged_dataset(
+#         yelp_path,
+#         fips_cache,
+#         biz_fips_map,
+#         max_entries
+#     )
+
+#     final_df = final_df.dropna(subset=[
+#         "is_open", "pcpi", "poverty_rate",
+#         "median_household_income", "unemployment_rate",
+#         "avg_weekly_wages", "rating_x_reviews"
+#     ])
+
+#     open_count = (final_df["is_open"] == 1).sum()
+#     closed_count = (final_df["is_open"] == 0).sum()
+#     total = len(final_df)
+
+#     print(f"Open: {open_count} ({open_count/total:.1%})")
+#     print(f"Closed: {closed_count} ({closed_count/total:.1%})")
+
+#     final_df.to_parquet("../dataset/yelp_fred_merged.parquet", index=False)
+#     print("Dataset saved to dataset/yelp_fred_merged.parquet")
 if __name__ == "__main__":
     yelp_path = "../raw_data/yelp_academic_dataset_business.json"
-    max_entries = 1000
+    checkin_path = "../raw_data/yelp_academic_dataset_checkin.json"
+    max_entries = 17500
+    TOP_K = 50
+
+    print("Extracting top categories...")
+    top_categories = get_top_k_categories(yelp_path, max_entries, TOP_K)
+
+    print(f"Using {len(top_categories)} category features")
 
     print("Building FIPS → Economic Indicator Cache...")
-
-    # unpack both values
     fips_cache, biz_fips_map = build_county_econ_cache(yelp_path, max_entries)
 
-    print(f"\nCached counties: {len(fips_cache)}")
-    print(f"Businesses with FIPS assigned: {len(biz_fips_map)}")
+    print("Building business age map from check-ins...")
+    business_age_map = build_business_age_map(checkin_path)
+    print(f"Businesses with check-in age: {len(business_age_map)}")
 
     print("Building merged dataset...")
     final_df = build_merged_dataset(
         yelp_path,
         fips_cache,
         biz_fips_map,
-        max_entries
+        max_entries,
+        top_categories,
+        business_age_map
     )
 
     final_df = final_df.dropna(subset=[
-        "rating", "is_open", "pcpi", "poverty_rate",
+        "is_open", "pcpi", "poverty_rate",
         "median_household_income", "unemployment_rate",
-        "avg_weekly_wages"
+        "avg_weekly_wages", "rating_x_reviews"
     ])
 
     open_count = (final_df["is_open"] == 1).sum()
@@ -316,5 +486,4 @@ if __name__ == "__main__":
     print(f"Closed: {closed_count} ({closed_count/total:.1%})")
 
     final_df.to_parquet("../dataset/yelp_fred_merged.parquet", index=False)
-    print("Dataset saved to dataset/yelp_fred_merged.parquet")
-
+    print("Dataset saved.")

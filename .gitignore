@@ -1,4 +1,5 @@
 .env
 data_pipeline/src/raw_data/yelp_academic_dataset_business.json
-data_pipeline/src/dataset/yelp_fred_merged.parquet
+data_pipeline/src/raw_data/yelp_academic_dataset_checkin.json
 data_pipeline/src/outputs
+data_pipeline/src/dataset/yelp_fred_merged.parquet
