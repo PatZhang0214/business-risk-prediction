@@ -9,8 +9,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import (
     accuracy_score,
-    precision_score
+    precision_score,
+    f1_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
 )
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from split_data import load_train_data, load_test_data, FEATURE_COLS
 
@@ -66,7 +72,7 @@ def train(n_iter: int = 100, cv_folds: int = 5, random_state: int = 42):
         clf,
         param_distributions=get_param_distributions(),
         n_iter=n_iter,
-        scoring="average_precision",
+        scoring="f1_macro",
         cv=StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state),
         n_jobs=-1,
         random_state=random_state,
@@ -76,7 +82,7 @@ def train(n_iter: int = 100, cv_folds: int = 5, random_state: int = 42):
     print(f"Training with {n_iter} iterations, {cv_folds}-fold CV...")
     search.fit(X_train, y_train)
     
-    print(f"\nBest CV Score (Avg Precision): {search.best_score_:.4f}")
+    print(f"\nBest CV Score (F1 Macro): {search.best_score_:.4f}")
     print("Best Parameters:")
     for param, value in search.best_params_.items():
         print(f"  {param}: {value}")
@@ -84,7 +90,9 @@ def train(n_iter: int = 100, cv_folds: int = 5, random_state: int = 42):
     return search.best_estimator_, search.best_params_, search.best_score_
 
 
-def save_model(model: LogisticRegression, best_params: dict, cv_score: float) -> Path:
+def save_model(
+    model: LogisticRegression, best_params: dict, cv_score: float
+) -> Path:
     """Save trained model, removing old versions."""
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     
@@ -105,7 +113,7 @@ def save_model(model: LogisticRegression, best_params: dict, cv_score: float) ->
     with open(model_dir / "summary.txt", "w") as f:
         f.write(f"Logistic Regression Model\n{'=' * 30}\n")
         f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"CV Score (Avg Precision): {cv_score:.4f}\n\n")
+        f.write(f"CV Score (F1 Macro): {cv_score:.4f}\n\n")
         f.write("Best Parameters:\n")
         for param, value in best_params.items():
             f.write(f"  {param}: {value}\n")
@@ -140,19 +148,48 @@ def evaluate(model: LogisticRegression = None) -> dict:
         model = load_model()
     
     X_test, y_test = load_test_data()
-    
     y_pred = model.predict(X_test)
-    y_proba = model.predict_proba(X_test)[:, 1]
     
     metrics = {
         "accuracy": accuracy_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred)
+        "precision_pos1": precision_score(y_test, y_pred, pos_label=1, zero_division=0),
+        "f1_pos1": f1_score(y_test, y_pred, pos_label=1, zero_division=0),
+        "precision_pos0": precision_score(y_test, y_pred, pos_label=0, zero_division=0),
+        "f1_pos0": f1_score(y_test, y_pred, pos_label=0, zero_division=0),
+        "f1_macro": f1_score(y_test, y_pred, average="macro", zero_division=0),
+    }
+
+    # Confusion matrix: rows=true, cols=pred in label order [0, 1]
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+    cm_dict = {
+        "labels": [0, 1],
+        "matrix": cm.tolist(),
+        "tn": int(cm[0, 0]),
+        "fp": int(cm[0, 1]),
+        "fn": int(cm[1, 0]),
+        "tp": int(cm[1, 1]),
     }
     
     print("\n📈 Test Set Metrics:")
     print(f"  Accuracy:  {metrics['accuracy']:.4f}")
-    print(f"  Precision: {metrics['precision']:.4f}")
+    print(f"  Predicted positive rate: {float(y_pred.mean()):.2%}")
+    print(f"  F1 Macro:  {metrics['f1_macro']:.4f}")
+    print(f"  F1 (pos=1): {metrics['f1_pos1']:.4f} | Precision (pos=1): {metrics['precision_pos1']:.4f}")
+    print(f"  F1 (pos=0): {metrics['f1_pos0']:.4f} | Precision (pos=0): {metrics['precision_pos0']:.4f}")
+    
+    # Save confusion matrix plot next to the latest model.
+    model_dirs = list(MODEL_DIR.glob("logistic_regression_*"))
+    if model_dirs:
+        latest_model_dir = max(model_dirs, key=lambda p: p.name)
+        fig, ax = plt.subplots(figsize=(5, 4), dpi=200)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+        disp.plot(ax=ax, values_format="d", colorbar=False)
+        ax.set_title("Confusion Matrix (Test Set)")
+        fig.tight_layout()
+        fig.savefig(latest_model_dir / "confusion_matrix.png", bbox_inches="tight")
+        plt.close(fig)
 
+    metrics["confusion_matrix"] = cm_dict
     return metrics
 
 
