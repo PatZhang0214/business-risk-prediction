@@ -1,0 +1,63 @@
+rating_x_reviews
+review_count
+num_categories
+years_in_business
+num_checkins
+has_checkin
+pcpi
+poverty_rate
+median_household_income
+unemployment_rate
+avg_weekly_wages
+latitude
+longitude
+cat_Restaurants
+cat_Food
+cat_Shopping
+cat_Home Services
+cat_Beauty & Spas
+cat_Health & Medical
+cat_Nightlife
+cat_Local Services
+cat_Automotive
+cat_Bars
+cat_Event Planning & Services
+cat_Sandwiches
+cat_Active Life
+cat_American (Traditional)
+cat_Pizza
+cat_Fast Food
+cat_Coffee & Tea
+cat_Breakfast & Brunch
+cat_American (New)
+cat_Hotels & Travel
+cat_Home & Garden
+cat_Fashion
+cat_Arts & Entertainment
+cat_Burgers
+cat_Auto Repair
+cat_Hair Salons
+cat_Italian
+cat_Mexican
+cat_Nail Salons
+cat_Specialty Food
+cat_Pets
+cat_Doctors
+cat_Real Estate
+cat_Seafood
+cat_Fitness & Instruction
+cat_Professional Services
+cat_Hair Removal
+cat_Grocery
+cat_Salad
+cat_Bakeries
+cat_Hotels
+cat_Chinese
+cat_Desserts
+cat_Chicken Wings
+cat_Cafes
+cat_Caterers
+cat_Ice Cream & Frozen Yogurt
+cat_Venues & Event Spaces
+cat_Pet Services
+cat_Tires

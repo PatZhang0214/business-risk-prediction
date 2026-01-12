@@ -14,7 +14,8 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     confusion_matrix,
-    classification_report
+    classification_report,
+    average_precision_score
 )
 import json
 
@@ -215,6 +216,22 @@ y_test_pred_proba = model.predict_proba(X_test)[:, 1]
 val_auc = roc_auc_score(y_val, y_val_pred_proba)
 test_auc = roc_auc_score(y_test, y_test_pred_proba)
 
+pr_auc = average_precision_score(y_test, y_test_pred_proba)
+
+print(f"PR-AUC Score: {pr_auc:.4f}")
 print(f"Validation ROC-AUC: {val_auc:.4f}")
 print(f"Test ROC-AUC:       {test_auc:.4f}")
 print(f"Difference:         {abs(val_auc - test_auc):.4f}")
+
+# At the end of train.py, after saving the model
+
+print("\n" + "="*60)
+print("Running evaluation on test set...")
+print("="*60)
+
+# Save feature names for evaluate.py
+with open("models/features.txt", "w") as f:
+    f.write("\n".join(features))
+
+print("\nTo re-run evaluation later:")
+print(f"python evaluate.py --model models/xgboost_model.pkl --features '{' '.join(features)}'")

@@ -1,0 +1,11 @@
+BUSINESS RISK PREDICTION - CLASSIFICATION REPORT
+============================================================
+
+              precision    recall  f1-score   support
+
+      Closed     0.4654    0.7163    0.5642       497
+        Open     0.9198    0.7981    0.8547      2026
+
+    accuracy                         0.7820      2523
+   macro avg     0.6926    0.7572    0.7094      2523
+weighted avg     0.8303    0.7820    0.7974      2523
