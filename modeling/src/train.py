@@ -183,6 +183,66 @@ print("\n💾 Feature importance plot saved to: feature_importance.png")
 Path("models").mkdir(exist_ok=True)
 joblib.dump(model, "models/xgboost_model.pkl")
 
+# ===============================
+# Generate model_config.json
+# ===============================
+from datetime import datetime
+
+model_config = {
+    "model_version": "1.0.0",
+    "training_date": datetime.now().strftime("%Y-%m-%d"),
+    "model_type": "XGBClassifier",
+    "features": {
+        "names": features,
+        "count": len(features),
+        "base_features": base_features,
+        "category_features": category_features
+    },
+    "target": target,
+    "dataset": {
+        "source": "PatZhang0214/business-risk-prediction-dataset",
+        "version": "v3",
+        "total_samples": len(df),
+        "train_samples": len(X_train),
+        "val_samples": len(X_val),
+        "test_samples": len(X_test),
+        "train_split": 0.70,
+        "val_split": 0.15,
+        "test_split": 0.15,
+        "random_state": 67
+    },
+    "class_distribution": {
+        "train": {
+            "open": int(num_open),
+            "closed": int(num_closed),
+            "imbalance_ratio": round(scale_pos_weight, 2)
+        }
+    },
+    "hyperparameters": {
+        "n_estimators": model.n_estimators,
+        "max_depth": model.max_depth,
+        "learning_rate": model.learning_rate,
+        "scale_pos_weight": float(scale_pos_weight),
+        "eval_metric": "auc",
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "early_stopping_rounds": 30,
+        "random_state": 67
+    },
+    "preprocessing": {
+        "scaling": "none",
+        "feature_engineering": [
+            "rating_x_reviews (interaction term)",
+            "one-hot encoding for top categories"
+        ]
+    }
+}
+
+with open("models/model_config.json", "w") as f:
+    json.dump(model_config, f, indent=2)
+
+print("✅ Model config saved to: models/model_config.json")
+
 metrics = {
     "roc_auc": roc_auc,
     "accuracy": accuracy,
